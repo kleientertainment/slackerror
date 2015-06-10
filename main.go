@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 )
 
 type URL string
@@ -78,8 +79,23 @@ func (c *SlackChannel) SendAttachment(a *Attachment) (err error) {
 	return jsonPost(c.URL, &m)
 }
 
+type FieldList []*Field
+
+func (f FieldList) Len() int {
+	return len(f)
+}
+func (f FieldList) Less(i, j int) bool {
+	if f[i].Short != f[j].Short {
+		return f[i].Short
+	}
+	return f[i].Title < f[j].Title
+}
+func (f FieldList) Swap(i, j int) {
+	f[i], f[j] = f[j], f[i]
+}
+
 func (c *SlackChannel) SendMessage(messageToSend string, colour Colour, shortFields map[string]string, longFields map[string]string) (err error) {
-	var fields []*Field
+	var fields FieldList
 
 	x := func(m map[string]string, short bool) {
 		for k, v := range m {
@@ -92,6 +108,7 @@ func (c *SlackChannel) SendMessage(messageToSend string, colour Colour, shortFie
 	}
 	x(shortFields, true)
 	x(longFields, false)
+	sort.Sort(fields)
 	if err = c.SendAttachment(&Attachment{
 		Fallback: fmt.Sprintf("Error: %s", messageToSend),
 		Text:     messageToSend,
