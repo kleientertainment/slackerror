@@ -78,7 +78,7 @@ func (c *SlackChannel) SendAttachment(a *Attachment) (err error) {
 	return jsonPost(c.URL, &m)
 }
 
-func (c *SlackChannel) SendError(errorToSend error, colour Colour, shortFields map[string]string, longFields map[string]string) (err error) {
+func (c *SlackChannel) SendMessage(messageToSend string, colour Colour, shortFields map[string]string, longFields map[string]string) (err error) {
 	var fields []*Field
 
 	x := func(m map[string]string, short bool) {
@@ -93,12 +93,16 @@ func (c *SlackChannel) SendError(errorToSend error, colour Colour, shortFields m
 	x(shortFields, true)
 	x(longFields, false)
 	if err = c.SendAttachment(&Attachment{
-		Fallback: fmt.Sprintf("Error: %s", errorToSend.Error()),
-		Text:     errorToSend.Error(),
+		Fallback: fmt.Sprintf("Error: %s", messageToSend),
+		Text:     messageToSend,
 		Colour:   colour,
 		Fields:   fields,
 	}); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (c *SlackChannel) SendError(errorToSend error, colour Colour, shortFields map[string]string, longFields map[string]string) (err error) {
+	return c.SendMessage(errorToSend.Error(), colour, shortFields, longFields)
 }
