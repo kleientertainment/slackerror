@@ -79,6 +79,10 @@ func (c *SlackChannel) SendAttachment(a *Attachment) (err error) {
 	return jsonPost(c.URL, &m)
 }
 
+func (c *SlackChannel) SendRawMessage(m Message) (err error) {
+	return jsonPost(c.URL, &m)
+}
+
 type FieldList []*Field
 
 func (f FieldList) Len() int {
