@@ -30,11 +30,14 @@ type Message struct {
 }
 
 type Attachment struct {
-	Fallback string   `json:"fallback"`
-	Text     string   `json:"text,omitempty"`
-	PreText  string   `json:"pretext,omitempty"`
-	Colour   Colour   `json:"color,omitempty"` //// Can either be one of 'good', 'warning', 'danger', or any hex color code
-	Fields   []*Field `json:"fields,omitempty"`
+	Title     string   `json:"title,omitempty"`
+	TitleLink string   `json:"title_link,omitempty"`
+	ImageURL  string   `json:"image_url,omitempty"`
+	Fallback  string   `json:"fallback"`
+	Text      string   `json:"text,omitempty"`
+	PreText   string   `json:"pretext,omitempty"`
+	Colour    Colour   `json:"color,omitempty"` //// Can either be one of 'good', 'warning', 'danger', or any hex color code
+	Fields    []*Field `json:"fields,omitempty"`
 }
 
 type Field struct {
