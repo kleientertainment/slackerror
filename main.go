@@ -89,16 +89,16 @@ func (c *SlackChannel) SendRawMessage(m Message) (err error) {
 	return jsonPost(c.URL, &m)
 }
 
-func (c *SlackChannel) OnPanic() {
+func (c *SlackChannel) OnPanic(hostname string) {
 	r := recover()
 	if r == nil {
 		return
 	}
-	var errStr = fmt.Sprintf("%s panic: %s", Config.hostname, r)
+	var errStr = fmt.Sprintf("%s panic: %s", hostname, r)
 	var stackTrace = fmt.Sprintf("%s\n", debug.Stack())
 	log.Printf("%s: %s\n", errStr, stackTrace)
 	c.SendMessage(errStr, "danger",
-		map[string]string{"Server": Config.hostname},
+		map[string]string{"Server": hostname},
 		map[string]string{"Stack Trace": stackTrace},
 	)
 	panic(r)
