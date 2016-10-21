@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"runtime/debug"
 	"sort"
 )
 
@@ -85,6 +87,21 @@ func (c *SlackChannel) SendAttachment(a *Attachment) (err error) {
 
 func (c *SlackChannel) SendRawMessage(m Message) (err error) {
 	return jsonPost(c.URL, &m)
+}
+
+func (c *SlackChannel) OnPanic() {
+	r := recover()
+	if r == nil {
+		return
+	}
+	var errStr = fmt.Sprintf("%s panic: %s", Config.hostname, r)
+	var stackTrace = fmt.Sprintf("%s\n", debug.Stack())
+	log.Printf("%s: %s\n", errStr, stackTrace)
+	c.SendMessage(errStr, "danger",
+		map[string]string{"Server": Config.hostname},
+		map[string]string{"Stack Trace": stackTrace},
+	)
+	panic(r)
 }
 
 type FieldList []*Field
