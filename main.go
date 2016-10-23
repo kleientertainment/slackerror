@@ -1,19 +1,18 @@
 package slack
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"runtime/debug"
 	"sort"
+	"sync"
+	"time"
 )
 
-type URL string
-type Colour string
-
 type SlackChannel struct {
+	start     sync.Once
+	messages  chan *messageWithErrCh
 	c         *http.Client
 	URL       URL // The URL returned by slack's webhook integration thing
 	UserName  string
@@ -22,58 +21,8 @@ type SlackChannel struct {
 	Channel   string
 }
 
-type Message struct {
-	UserName    string        `json:"username,omitempty"`
-	UserIcon    URL           `json:"icon_url,omitempty"`
-	UserEmoji   string        `json:"icon_emoji,omitempty"`
-	Channel     string        `json:"channel,omitempty"`
-	Attachments []*Attachment `json:"attachments,omitempty"`
-	Text        string        `json:"text,omitempty"`
-}
-
-type Attachment struct {
-	Title     string   `json:"title,omitempty"`
-	TitleLink string   `json:"title_link,omitempty"`
-	ImageURL  string   `json:"image_url,omitempty"`
-	ThumbURL  string   `json:"thumb_url,omitempty"`
-	Fallback  string   `json:"fallback"`
-	Text      string   `json:"text,omitempty"`
-	PreText   string   `json:"pretext,omitempty"`
-	Colour    Colour   `json:"color,omitempty"` //// Can either be one of 'good', 'warning', 'danger', or any hex color code
-	Fields    []*Field `json:"fields,omitempty"`
-}
-
-type Field struct {
-	Title string `json:"title"`           // The title may not contain markup and will be escaped for you
-	Value string `json:"value"`           // Text value of the field. May contain standard message markup and must be escaped as normal.  May be multi-line
-	Short bool   `json:"short,omitempty"` // Optional flag indicating whether the `value` is short enough to be displayed side-by-side with other values
-}
-
-func jsonPost(url URL, data interface{}) (err error) {
-	var resp *http.Response
-	var errCh = make(chan error)
-
-	r, w := io.Pipe()
-	go func() {
-		var err error
-		j := json.NewEncoder(w)
-		err = j.Encode(data)
-		if err != nil {
-			errCh <- err
-		}
-		w.Close()
-		close(errCh)
-	}()
-	if resp, err = http.Post(string(url), "application/json", r); err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	err = <-errCh
-	return err
-}
-
 func (c *SlackChannel) SendAttachment(a *Attachment) (err error) {
-	var m Message // FIXME Pool instead of GC?
+	var m Message
 
 	m.UserName = c.UserName
 	m.UserIcon = c.UserIcon
@@ -82,41 +31,7 @@ func (c *SlackChannel) SendAttachment(a *Attachment) (err error) {
 
 	m.Attachments = append(m.Attachments, a)
 
-	return jsonPost(c.URL, &m)
-}
-
-func (c *SlackChannel) SendRawMessage(m Message) (err error) {
-	return jsonPost(c.URL, &m)
-}
-
-func (c *SlackChannel) OnPanic(hostname string) {
-	r := recover()
-	if r == nil {
-		return
-	}
-	var errStr = fmt.Sprintf("%s panic: %s", hostname, r)
-	var stackTrace = fmt.Sprintf("%s\n", debug.Stack())
-	log.Printf("%s: %s\n", errStr, stackTrace)
-	c.SendMessage(errStr, "danger",
-		map[string]string{"Server": hostname},
-		map[string]string{"Stack Trace": stackTrace},
-	)
-	panic(r)
-}
-
-type FieldList []*Field
-
-func (f FieldList) Len() int {
-	return len(f)
-}
-func (f FieldList) Less(i, j int) bool {
-	if f[i].Short != f[j].Short {
-		return f[i].Short
-	}
-	return f[i].Title < f[j].Title
-}
-func (f FieldList) Swap(i, j int) {
-	f[i], f[j] = f[j], f[i]
+	return c.SendRawMessage(m)
 }
 
 func (c *SlackChannel) SendMessage(messageToSend string, colour Colour, shortFields map[string]string, longFields map[string]string) (err error) {
@@ -143,6 +58,57 @@ func (c *SlackChannel) SendMessage(messageToSend string, colour Colour, shortFie
 		return err
 	}
 	return nil
+}
+
+func (c *SlackChannel) SendRawMessage(m Message) (err error) {
+	c.start.Do(c.Run)
+	var timeout = time.NewTimer(5 * time.Second)
+	var m2 = messageWithErrCh{errCh: make(chan error), message: m}
+	select {
+	case c.messages <- &m2:
+		timeout.Stop()
+		<-timeout.C
+		return <-m2.errCh
+	case <-timeout.C: // Took too long to send
+		return fmt.Errorf("This daemon is queueing too many slack messages")
+	}
+}
+
+func (c *SlackChannel) Run() {
+	var err error
+	c.messages = make(chan *messageWithErrCh)
+	go func() {
+		var sleepTime = 1 * time.Second // Slack doesn't like more than one message per second on average
+		for message := range c.messages {
+			err = jsonPost(c.URL, message)
+			if responseDetails, ok := err.(*Non200ResponseError); ok && responseDetails.Code == 429 {
+				// We're being told to back off, presumably because lots of other instances on the same webhook are also spamming
+				if responseDetails.CountSecondAgo < 4 {
+					sleepTime = time.Duration(4 * time.Second)
+				}
+				sleepTime = time.Duration(responseDetails.CountSecondAgo) * time.Second
+			}
+			time.Sleep(sleepTime)
+			if sleepTime >= 2*time.Second {
+				sleepTime -= 1 * time.Second
+			}
+		}
+	}()
+}
+
+func (c *SlackChannel) OnPanic(hostname string) {
+	r := recover()
+	if r == nil {
+		return
+	}
+	var errStr = fmt.Sprintf("%s panic: %s", hostname, r)
+	var stackTrace = fmt.Sprintf("%s\n", debug.Stack())
+	log.Printf("%s: %s\n", errStr, stackTrace)
+	c.SendMessage(errStr, "danger",
+		map[string]string{"Server": hostname},
+		map[string]string{"Stack Trace": stackTrace},
+	)
+	panic(r)
 }
 
 func (c *SlackChannel) SendError(errorToSend error, colour Colour, shortFields map[string]string, longFields map[string]string) (err error) {
