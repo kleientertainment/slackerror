@@ -16,18 +16,25 @@ type Message struct {
 	Channel     string        `json:"channel,omitempty"`
 	Attachments []*Attachment `json:"attachments,omitempty"`
 	Text        string        `json:"text,omitempty"`
+	Markdown    bool          `json:"mrkdwn,omitempty"`
 }
 
 type Attachment struct {
-	Title     string   `json:"title,omitempty"`
-	TitleLink string   `json:"title_link,omitempty"`
-	ImageURL  string   `json:"image_url,omitempty"`
-	ThumbURL  string   `json:"thumb_url,omitempty"`
-	Fallback  string   `json:"fallback"`
-	Text      string   `json:"text,omitempty"`
-	PreText   string   `json:"pretext,omitempty"`
-	Colour    Colour   `json:"color,omitempty"` //// Can either be one of 'good', 'warning', 'danger', or any hex color code
-	Fields    []*Field `json:"fields,omitempty"`
+	AuthorName string   `json:"author_name,omitempty"`
+	AuthorLink string   `json:"author_link,omitempty"`
+	AuthorIcon string   `json:"author_icon,omitempty"`
+	Title      string   `json:"title,omitempty"`
+	TitleLink  string   `json:"title_link,omitempty"`
+	ImageURL   string   `json:"image_url,omitempty"`
+	ThumbURL   string   `json:"thumb_url,omitempty"`
+	Fallback   string   `json:"fallback"`
+	Text       string   `json:"text,omitempty"`
+	PreText    string   `json:"pretext,omitempty"`
+	Colour     Colour   `json:"color,omitempty"` //// Can either be one of 'good', 'warning', 'danger', or any hex color code
+	Fields     []*Field `json:"fields,omitempty"`
+	Footer     string   `json:"footer,omitempty"`
+	FooterIcon string   `json:"footer_icon,omitempty"`
+	MarkdownIn []string `json:"mrkdwn_in,omitempty"` /// Can either be one of 'pretext', 'text' or 'fields'
 }
 
 type Field struct {
