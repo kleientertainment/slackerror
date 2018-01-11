@@ -166,6 +166,9 @@ func (c *SlackChannel) OnPanic(hostname string) {
 }
 
 func (c *SlackChannel) SendError(errorToSend error, colour Colour, shortFields map[string]string, longFields map[string]string) (err error) {
+	if errorToSend == nil {
+		errorToSend = fmt.Errorf("SendError called with a nil error")
+	}
 	c.start.Do(c.Run)
 	var a = prepareAttachment(errorToSend.Error(), colour, shortFields, longFields)
 	select {
