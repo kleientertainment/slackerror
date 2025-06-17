@@ -23,7 +23,6 @@ type SlackChannel struct {
 	start    sync.Once
 	messages chan *messageWithErrCh
 	errors   chan *Attachment
-	stop     chan struct{}
 	done     chan struct{}
 	shutdown sync.Once
 	errorDropCount
@@ -85,10 +84,11 @@ func (c *SlackChannel) getNext() (m *Message, errCh chan<- error) {
 	case a := <-c.errors:
 		m.Attachments = c.getAllErrors(a)
 		return m, nil
-	case mwe := <-c.messages:
+	case mwe, closed := <-c.messages:
+		if closed {
+			return nil, nil
+		}
 		return &mwe.message, mwe.errCh
-	case <-c.stop:
-		return nil, nil
 	}
 }
 
@@ -131,7 +131,6 @@ func (c *SlackChannel) Run() {
 	var err error
 	c.messages = make(chan *messageWithErrCh, 1)
 	c.errors = make(chan *Attachment, MAX_ERRORS)
-	c.stop = make(chan struct{})
 	c.done = make(chan struct{})
 	go func() {
 		defer close(c.done)
@@ -196,7 +195,7 @@ func (c *SlackChannel) SendError(errorToSend error, colour Colour, shortFields m
 
 func (c *SlackChannel) Shutdown() {
 	c.shutdown.Do(func() {
-		close(c.stop)
+		close(c.messages)
 		<-c.done
 	})
 }
