@@ -84,8 +84,8 @@ func (c *SlackChannel) getNext() (m *Message, errCh chan<- error) {
 	case a := <-c.errors:
 		m.Attachments = c.getAllErrors(a)
 		return m, nil
-	case mwe, closed := <-c.messages:
-		if closed {
+	case mwe, ok := <-c.messages:
+		if !ok {
 			return nil, nil
 		}
 		return &mwe.message, mwe.errCh
