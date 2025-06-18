@@ -23,6 +23,8 @@ type SlackChannel struct {
 	start    sync.Once
 	messages chan *messageWithErrCh
 	errors   chan *Attachment
+	done     chan struct{}
+	shutdown sync.Once
 	errorDropCount
 	c         *http.Client
 	URL       URL // The URL returned by slack's webhook integration thing
@@ -82,7 +84,10 @@ func (c *SlackChannel) getNext() (m *Message, errCh chan<- error) {
 	case a := <-c.errors:
 		m.Attachments = c.getAllErrors(a)
 		return m, nil
-	case mwe := <-c.messages:
+	case mwe, ok := <-c.messages:
+		if !ok {
+			return nil, nil
+		}
 		return &mwe.message, mwe.errCh
 	}
 }
@@ -126,10 +131,15 @@ func (c *SlackChannel) Run() {
 	var err error
 	c.messages = make(chan *messageWithErrCh, 1)
 	c.errors = make(chan *Attachment, MAX_ERRORS)
+	c.done = make(chan struct{})
 	go func() {
+		defer close(c.done)
 		var sleepTime = 1 * time.Second // Slack doesn't like more than one message per second on average
 		for {
 			var message, errCh = c.getNext()
+			if message == nil {
+				return
+			}
 			err = jsonPost(c.URL, message)
 			if responseDetails, ok := err.(*Non200ResponseError); ok && responseDetails.Code == 429 {
 				// We're being told to back off, presumably because lots of other instances on the same webhook are also spamming
@@ -181,4 +191,15 @@ func (c *SlackChannel) SendError(errorToSend error, colour Colour, shortFields m
 		c.errorDropCount.Unlock()
 		return fmt.Errorf("Too many errors, %d thrown away", dc)
 	}
+}
+
+func (c *SlackChannel) Shutdown() {
+	c.shutdown.Do(func() {
+		// Nobody ever sent a message, nothing to shut down
+		if c.messages == nil {
+			return
+		}
+		close(c.messages)
+		<-c.done
+	})
 }
