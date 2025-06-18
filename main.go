@@ -195,6 +195,8 @@ func (c *SlackChannel) SendError(errorToSend error, colour Colour, shortFields m
 
 func (c *SlackChannel) Shutdown() {
 	c.shutdown.Do(func() {
+		// No-op if Run() has already been called
+		c.start.Do(c.Run)
 		close(c.messages)
 		<-c.done
 	})
