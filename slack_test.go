@@ -7,7 +7,7 @@ import (
 
 func TestSlack(t *testing.T) {
 	var err error
-	var c = SlackChannel{URL: "https://hooks.slack.com/services/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", UserName: "UnitTestBot", Channel: "@nome"}
+	var c = SlackChannel{URL: "", UserName: "UnitTestBot", Channel: "@nome"}
 
 	if err = c.SendError(fmt.Errorf("Error: Mike is too awesome"), "warning", []*Field{
 		{
